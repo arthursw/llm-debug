@@ -1,0 +1,21 @@
+[project]
+name = "llm-debug"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Arthur Masson", email = "arthur.masson@inria.fr" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "openai>=1.107.3",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "ipython>=9.5.0",
+]
