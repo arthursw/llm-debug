@@ -59,7 +59,9 @@ def test_execute_blocks_user_declines(monkeypatch, capsys):
     monkeypatch.setattr(builtins, "input", lambda prompt="": "n")
     executed = {"called": False}
 
-    monkeypatch.setattr(ldbg, "execute_code_block", lambda code: executed.update(called=True))
+    monkeypatch.setattr(
+        ldbg, "execute_code_block", lambda code: executed.update(called=True)
+    )
 
     ldbg.execute_blocks(md)
     captured = capsys.readouterr()
@@ -118,6 +120,7 @@ def test_generate_commands_handles_none_response(monkeypatch, capsys):
     """
     If the API returns a response object with None content, generate_commands should return gracefully.
     """
+
     def fake_create_none(*args, **kwargs):
         msg = types.SimpleNamespace(content=None)
         choice = types.SimpleNamespace(message=msg)
@@ -125,7 +128,13 @@ def test_generate_commands_handles_none_response(monkeypatch, capsys):
 
     monkeypatch.setattr(ldbg.client.chat.completions, "create", fake_create_none)
     # Patch execute_blocks to ensure it would not be called when response is None
-    monkeypatch.setattr(ldbg, "execute_blocks", lambda t: (_ for _ in ()).throw(AssertionError("should not be called")))
+    monkeypatch.setattr(
+        ldbg,
+        "execute_blocks",
+        lambda t: (_ for _ in ()).throw(AssertionError("should not be called")),
+    )
 
     # Call - should not raise
-    ldbg.generate_commands("any prompt", frame=inspect.currentframe(), print_prompt=False)
+    ldbg.generate_commands(
+        "any prompt", frame=inspect.currentframe(), print_prompt=False
+    )

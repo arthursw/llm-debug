@@ -11,7 +11,7 @@ from typing import cast
 from openai import OpenAI
 
 LENGTH_MAX = 10000
-CODE_BLOCK_REGEX = r'```(?:[\w+-]*)\n(.*?)```'
+CODE_BLOCK_REGEX = r"```(?:[\w+-]*)\n(.*?)```"
 
 if "OPENROUTER_API_KEY" in os.environ:
     client = OpenAI(
@@ -21,14 +21,17 @@ if "OPENROUTER_API_KEY" in os.environ:
 else:
     client = OpenAI()
 
+
 def extract_code_blocks(markdown_text: str):
     pattern = re.compile(CODE_BLOCK_REGEX, re.DOTALL)
     return pattern.findall(markdown_text)
 
+
 def execute_code_block(code: str):
     exec(code, {})
 
-def execute_blocks(markdown_text: str | None)-> None:
+
+def execute_blocks(markdown_text: str | None) -> None:
     """
     Extract the code blocks in the markdown and ask user if he wants to execute them
     """
@@ -42,7 +45,15 @@ def execute_blocks(markdown_text: str | None)-> None:
         if confirm.lower() in ["yes", "y"]:
             execute_code_block(block)
 
-def generate_commands(prompt:str, frame=None, model="gpt-5-mini-2025-08-07", print_prompt=True, length_max=LENGTH_MAX, context=""):
+
+def generate_commands(
+    prompt: str,
+    frame=None,
+    model="gpt-5-mini-2025-08-07",
+    print_prompt=True,
+    length_max=LENGTH_MAX,
+    context="",
+):
     """
     Generate Python debug help based on natural-language instructions.
 
@@ -58,13 +69,13 @@ def generate_commands(prompt:str, frame=None, model="gpt-5-mini-2025-08-07", pri
     The model "gpt-5-mini-2025-08-07" answered:
 
         unknown_data is an numpy array which can be described with the following pandas code:
-        
+
         ```
         pandas.DataFrame(unknown_data).describe()
         ```
 
         Note: you can use numpy.set_printoptions (or a library like numpyprint) to pretty print your array:
-        
+
         ```
         with np.printoptions(precision=2, suppress=True, threshold=5):
             unknown_data
@@ -73,7 +84,7 @@ def generate_commands(prompt:str, frame=None, model="gpt-5-mini-2025-08-07", pri
     Would you like to execute the following code block:
         pandas.DataFrame(unknown_data).describe()
     (y/n)?
-    
+
 
     <<< user enters y
                   0
@@ -86,7 +97,7 @@ def generate_commands(prompt:str, frame=None, model="gpt-5-mini-2025-08-07", pri
     75%    6.000000
     max    8.000000
 
-    
+
     Would you like to execute the following code block:
         with np.printoptions(precision=2, suppress=True, threshold=5):
             unknown_data
@@ -95,11 +106,15 @@ def generate_commands(prompt:str, frame=None, model="gpt-5-mini-2025-08-07", pri
     <<< user enters n
     """
     if frame is None:
-        frame = cast(FrameType, inspect.currentframe().f_back) # type: ignore
+        frame = cast(FrameType, inspect.currentframe().f_back)  # type: ignore
 
     # Locals & globals preview
-    locals_preview = pprint.pformat(frame.f_locals)[:length_max] # {k: type(v).__name__ for k, v in frame.f_locals.items()}
-    globals_preview = pprint.pformat(frame.f_globals)[:length_max] # {k: type(v).__name__ for k, v in frame.f_globals.items()}
+    locals_preview = pprint.pformat(frame.f_locals)[
+        :length_max
+    ]  # {k: type(v).__name__ for k, v in frame.f_locals.items()}
+    globals_preview = pprint.pformat(frame.f_globals)[
+        :length_max
+    ]  # {k: type(v).__name__ for k, v in frame.f_globals.items()}
 
     # Traceback / call stack
     stack_summary = traceback.format_stack(frame)
@@ -263,24 +278,25 @@ def generate_commands(prompt:str, frame=None, model="gpt-5-mini-2025-08-07", pri
         model=model,
         messages=[
             {"role": "system", "content": context},
-            {"role": "user", "content": prompt}
+            {"role": "user", "content": prompt},
         ],
-        temperature=1
+        temperature=1,
     )
 
     response = resp.choices[0].message.content
-    
+
     if print_prompt:
         print("\n\n\n")
-    
+
     if response is None:
         return
-    
+
     print(f"Model {model} says:")
     print(textwrap.indent(response, "    "))
 
     execute_blocks(response)
 
     return
+
 
 gc = generate_commands
