@@ -2,6 +2,8 @@
 
 ### A Minimal Python Library to debug with LLMs
 
+The [ShellGPT](https://github.com/TheR1D/shell_gpt) for pdb, ipdb, Jupyter, the VS Code Debug Console, etc.
+
 Use natural-language prompts while debugging. Prompts are augmented with your current stack, variables, and source context.
 
 DO NOT USE THIS LIBRARY
@@ -12,7 +14,6 @@ DO NOT USE THIS LIBRARY
 
 - 🐍 Generate Python debug commands from natural-language instructions.
 - 🔍 Context-aware: prompt auto-includes call stack, local/global variable previews, current function - source, and nearby code.
-- ⚡ Works like an AI-augmented pdb: just ask what you want to inspect.
 - 🤖 Supports OpenRouter
 
 ## Installation
@@ -20,6 +21,15 @@ DO NOT USE THIS LIBRARY
 `pip install ldbg`
 
 ## Quick Start
+
+### Example natural-language prompts
+
+- "Describe my numpy arrays"
+- "plot my_data['b'] as a histogram"
+- "give me an example pandas dataframe about employees"
+- "generate a 3x12x16 example Pillow image from a numpy array"
+- "convert this Pillow image to grayscale"
+- "open this 'image.ome.tiff' with bioio"
 
 ### Example Session
 
@@ -34,13 +44,13 @@ The model "gpt-5-mini-2025-08-07" says:
 
     unknown_data is an numpy array which can be described with the following pandas code:
     
-    ```code block 1
+    ```
     pandas.DataFrame(unknown_data).describe()
     ```
 
     Note: you can use numpy.set_printoptions (or a library like numpyprint) to pretty print your array:
     
-    ```code block 2
+    ```
     with np.printoptions(precision=2, suppress=True, threshold=5):
         unknown_data
     ```
@@ -85,15 +95,6 @@ The model "gpt-5-mini-2025-08-07" says:
 Would you like to execute the following code block:
 ...
 ```
-
-### Example natural-language prompts
-
-- "Describe my numpy arrays"
-- "plot my_data['b'] as a histogram"
-- "give me an example pandas dataframe about employees"
-- "generate a 3x10x12 numpy array which will be used as an example image"
-- "convert this Pillow image to grayscale"
-- "open this 'image.ome.tiff' with bioio"
 
 ## Configuration
 

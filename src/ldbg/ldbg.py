@@ -2,7 +2,6 @@ import inspect
 import re
 import textwrap
 import traceback
-import linecache
 import os
 import pprint
 from types import FrameType
@@ -28,7 +27,7 @@ def extract_code_blocks(markdown_text: str):
 
 
 def execute_code_block(code: str):
-    exec(code, {})
+    exec(code, globals())
 
 
 def execute_blocks(markdown_text: str | None) -> None:
@@ -46,11 +45,15 @@ def execute_blocks(markdown_text: str | None) -> None:
             execute_code_block(block)
 
 
+def indent(text, prefix=" " * 4):
+    return textwrap.indent(text, prefix)
+
+
 def generate_commands(
     prompt: str,
     frame=None,
     model="gpt-5-mini-2025-08-07",
-    print_prompt=True,
+    print_prompt=False,
     length_max=LENGTH_MAX,
     context="",
 ):
@@ -127,16 +130,16 @@ def generate_commands(
     except (OSError, TypeError):
         func_source = "<source unavailable>"
 
-    # Context like ipdb 'll'
-    filename = frame.f_code.co_filename
-    lineno = frame.f_lineno
-    start_context = max(lineno - 10, 1)
-    context_lines = []
-    for i in range(start_context, lineno + 10):
-        line = linecache.getline(filename, i)
-        if line:
-            context_lines.append(f"{i:4d}: {line}")
-    context_text = "".join(context_lines)
+    additional_context = textwrap.dedent(
+        f"""
+    Additional context:
+        {indent(context)}
+    
+    ===================================
+    """
+        if context is not None and len(context) > 0
+        else ""
+    )
 
     # ldbg.generate_commands({prompt}, model={model}, code_only={code_only}, print_prompt={print_prompt}, print_answer={print_answer}, length_max={length_max})
     context = textwrap.dedent(f"""
@@ -145,23 +148,26 @@ def generate_commands(
                               
     The user just ran `import ldbg; ldbg.gc({prompt}, model={model})` to ask you some help (gc stands for generate commands).
 
-    Local variables and their types (`locals = pprint.pformat(inspect.currentframe().f_locals)[:length_max]`):
-    {locals_preview}
+    Local variables (`locals = pprint.pformat(inspect.currentframe().f_locals)[:length_max]`):
+        {indent(locals_preview)}
 
-    Global variables and their types (`globals = pprint.pformat(inspect.currentframe().f_globals)[:length_max]`):
-    {globals_preview}
+    ===================================
+
+    Global variables (`globals = pprint.pformat(inspect.currentframe().f_globals)[:length_max]`):
+        {indent(globals_preview)}
+
+    ===================================
 
     Current call stack (traceback):
-    {stack_text}
+        {indent(stack_text)}
+
+    ===================================
 
     Current function source:
-    {func_source}
+        {indent(func_source)}
 
-    Nearby code (like ipdb 'll'):
-    {context_text}
-
-    Additional context:
-    {context}
+    ===================================
+    {additional_context}
 
     If you need more context, a more detailed view of the local variables or the content of a source file, 
     tell the user the commands he should run to print the details you need.
@@ -258,7 +264,7 @@ def generate_commands(
         pandas.DataFrame(unknown_data).describe()
         ```
 
-        You could also use numpy.set_printoptions (or a library like numpyprint) to pretty print your array:
+        You could also use `numpy.set_printoptions` (or a library like numpyprint) to pretty print your array:
         
         ```
         with np.printoptions(precision=2, suppress=True, threshold=5):
@@ -266,6 +272,7 @@ def generate_commands(
         ```
 
     Always put the code to execute in triple backticks code blocks.
+    Provide short and concise answers and code.
     """)
 
     if print_prompt:
