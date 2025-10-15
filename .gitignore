@@ -5,6 +5,8 @@ build/
 dist/
 wheels/
 *.egg-info
+tool_prompts.md
+summarize_dict.py
 
 # Virtual environments
 .venv
