@@ -53,7 +53,9 @@ def execute_blocks(markdown_text: str | None, locals: dict) -> None:
             confirm = input("(y/n)").lower()
             after_input_time = time.time()
             if after_input_time - before_input_time < 0.5:
-                print(f"Discard answer \"{confirm}\" since it is likely from a previous keyboard stroke. Please wait at least 0.5s to read the code and answer safely.")
+                print(
+                    f'Discard answer "{confirm}" since it is likely from a previous keyboard stroke. Please wait at least 0.5s to read the code and answer safely.'
+                )
                 continue
             if confirm.lower() in ["yes", "y"]:
                 print(f"\nExecuting block {n}...\n\n")
@@ -127,29 +129,39 @@ def generate_commands(
 
     <<< user enters n
     """
-    
+
     global display_vscode_warning
     if display_vscode_warning:
         display_vscode_warning = False
         return VSCODE_WARNING_MESSAGE
-    
+
     frame_info = None
     if frame is None:
+        frame_info = next(
+            fi
+            for fi in inspect.stack()
+            if "/.vscode/extensions/" not in fi.filename
+            and "<string>" not in fi.filename
+            and not (
+                fi.filename.endswith("ldbg.py") and fi.function == "generate_commands"
+            )
+        )
 
-        frame_info = next(fi for fi in inspect.stack() if "/.vscode/extensions/" not in fi.filename and "<string>" not in fi.filename and not (fi.filename.endswith("ldbg.py") and fi.function == "generate_commands"))
-
-        frame:FrameType = cast(FrameType, frame_info.frame)
+        frame: FrameType = cast(FrameType, frame_info.frame)
 
     # Locals & globals preview
     filtered_locals = {
         key: value
         for key, value in frame.f_locals.items()
-        if key not in ['__builtin__', '__builtins__']
+        if key not in ["__builtin__", "__builtins__"]
     }
 
     locals_preview = pprint.pformat(filtered_locals)
-    if len(locals_preview)>length_max:
-        locals_preview = locals_preview[:length_max] + f" ... \nLocal variables are truncated because it is too long (more than {length_max} characters)!"
+    if len(locals_preview) > length_max:
+        locals_preview = (
+            locals_preview[:length_max]
+            + f" ... \nLocal variables are truncated because it is too long (more than {length_max} characters)!"
+        )
 
     # globals_preview = pprint.pformat(frame.f_globals)[
     #     :length_max
@@ -163,20 +175,22 @@ def generate_commands(
     try:
         source_lines, start_line = inspect.getsourcelines(frame)
         sources_lines_with_line_numbers = source_lines.copy()
-    
+
         for i, line in enumerate(source_lines):
             prefix = "→ " if i + start_line == frame.f_lineno else "  "
-            sources_lines_with_line_numbers[i] = f"{prefix}{i+start_line:4d}: {line.rstrip()}"
+            sources_lines_with_line_numbers[i] = (
+                f"{prefix}{i + start_line:4d}: {line.rstrip()}"
+            )
 
         func_source = "".join(sources_lines_with_line_numbers)
-    except (OSError, TypeError) as e:
+    except (OSError, TypeError):
         try:
             # fallback: print nearby lines from the source file
             filename = frame.f_code.co_filename
             start = frame.f_code.co_firstlineno
             lines = linecache.getlines(filename)
-            func_source = ''.join(lines[max(0, start-5): start+200])
-        except Exception as e:
+            func_source = "".join(lines[max(0, start - 5) : start + 200])
+        except Exception:
             func_source = "<source unavailable>"
 
     additional_context = textwrap.dedent(
