@@ -1,16 +1,24 @@
 import inspect
+import linecache
 import re
 import textwrap
+import time
 import traceback
 import os
+import sys
 import pprint
 from types import FrameType
 from typing import cast
 
 from openai import OpenAI
 
-LENGTH_MAX = 10000
+LENGTH_MAX = 50000
 CODE_BLOCK_REGEX = r"```(?:[\w+-]*)\n(.*?)```"
+
+# Message in one line since the Debug Console shows the raw string
+VSCODE_WARNING_MESSAGE = """It seems you are on VS Code. The answers will be printed in the Terminal while your inputs are made from the Debug Console. For optimal use, display the Debug Console and Terminal side-by-side. This message will be shown only once. Call the ldbg.gc() function again to make your request to the LLM."""
+
+display_vscode_warning = any("debugpy" in mod for mod in sys.modules)
 
 if "OPENROUTER_API_KEY" in os.environ:
     client = OpenAI(
@@ -26,23 +34,34 @@ def extract_code_blocks(markdown_text: str):
     return pattern.findall(markdown_text)
 
 
-def execute_code_block(code: str):
-    exec(code, globals())
+def execute_code_block(code: str, locals: dict):
+    exec(code, locals)
 
 
-def execute_blocks(markdown_text: str | None) -> None:
+def execute_blocks(markdown_text: str | None, locals: dict) -> None:
     """
     Extract the code blocks in the markdown and ask user if he wants to execute them
     """
     if markdown_text is None:
         return
     blocks = extract_code_blocks(markdown_text)
-    for block in blocks:
-        print("Would you like to execute the following code block:")
+    for n, block in enumerate(blocks):
+        print("\n\nWould you like to execute the following code block:\n")
         print(textwrap.indent(block, "    "))
-        confirm = input("(y/n)").lower()
-        if confirm.lower() in ["yes", "y"]:
-            execute_code_block(block)
+        while True:
+            before_input_time = time.time()
+            confirm = input("(y/n)").lower()
+            after_input_time = time.time()
+            if after_input_time - before_input_time < 0.5:
+                print(f"Discard answer \"{confirm}\" since it is likely from a previous keyboard stroke. Please wait at least 0.5s to read the code and answer safely.")
+                continue
+            if confirm.lower() in ["yes", "y"]:
+                print(f"\nExecuting block {n}...\n\n")
+                execute_code_block(block, locals)
+                print("\n\n\nExecution done.")
+            break
+    if any("debugpy" in mod for mod in sys.modules):
+        print("\nReturn to the Debug Console to get more help.")
 
 
 def indent(text, prefix=" " * 4):
@@ -108,27 +127,57 @@ def generate_commands(
 
     <<< user enters n
     """
+    
+    global display_vscode_warning
+    if display_vscode_warning:
+        display_vscode_warning = False
+        return VSCODE_WARNING_MESSAGE
+    
+    frame_info = None
     if frame is None:
-        frame = cast(FrameType, inspect.currentframe().f_back)  # type: ignore
+
+        frame_info = next(fi for fi in inspect.stack() if "/.vscode/extensions/" not in fi.filename and "<string>" not in fi.filename and not (fi.filename.endswith("ldbg.py") and fi.function == "generate_commands"))
+
+        frame:FrameType = cast(FrameType, frame_info.frame)
 
     # Locals & globals preview
-    locals_preview = pprint.pformat(frame.f_locals)[
-        :length_max
-    ]  # {k: type(v).__name__ for k, v in frame.f_locals.items()}
-    globals_preview = pprint.pformat(frame.f_globals)[
-        :length_max
-    ]  # {k: type(v).__name__ for k, v in frame.f_globals.items()}
+    filtered_locals = {
+        key: value
+        for key, value in frame.f_locals.items()
+        if key not in ['__builtin__', '__builtins__']
+    }
+
+    locals_preview = pprint.pformat(filtered_locals)
+    if len(locals_preview)>length_max:
+        locals_preview = locals_preview[:length_max] + f" ... \nLocal variables are truncated because it is too long (more than {length_max} characters)!"
+
+    # globals_preview = pprint.pformat(frame.f_globals)[
+    #     :length_max
+    # ]
 
     # Traceback / call stack
     stack_summary = traceback.format_stack(frame)
-    stack_text = "".join(stack_summary[-15:])  # limit to avoid overload
+    stack_text = "".join(stack_summary[-20:])  # limit to avoid overload
 
     # Current function source
     try:
         source_lines, start_line = inspect.getsourcelines(frame)
-        func_source = "".join(source_lines)
-    except (OSError, TypeError):
-        func_source = "<source unavailable>"
+        sources_lines_with_line_numbers = source_lines.copy()
+    
+        for i, line in enumerate(source_lines):
+            prefix = "→ " if i + start_line == frame.f_lineno else "  "
+            sources_lines_with_line_numbers[i] = f"{prefix}{i+start_line:4d}: {line.rstrip()}"
+
+        func_source = "".join(sources_lines_with_line_numbers)
+    except (OSError, TypeError) as e:
+        try:
+            # fallback: print nearby lines from the source file
+            filename = frame.f_code.co_filename
+            start = frame.f_code.co_firstlineno
+            lines = linecache.getlines(filename)
+            func_source = ''.join(lines[max(0, start-5): start+200])
+        except Exception as e:
+            func_source = "<source unavailable>"
 
     additional_context = textwrap.dedent(
         f"""
@@ -148,13 +197,8 @@ def generate_commands(
                               
     The user just ran `import ldbg; ldbg.gc({prompt}, model={model})` to ask you some help (gc stands for generate commands).
 
-    Local variables (`locals = pprint.pformat(inspect.currentframe().f_locals)[:length_max]`):
+    Local variables (`locals = pprint.pformat(inspect.currentframe().f_locals)`):
         {indent(locals_preview)}
-
-    ===================================
-
-    Global variables (`globals = pprint.pformat(inspect.currentframe().f_globals)[:length_max]`):
-        {indent(globals_preview)}
 
     ===================================
 
@@ -278,8 +322,8 @@ def generate_commands(
     if print_prompt:
         print("System prompt:")
         print(context)
-        print("\nUser prompt:")
-        print(prompt)
+
+    print(f'\n\nAsking {model} "{prompt}"...\n')
 
     resp = client.chat.completions.create(
         model=model,
@@ -298,10 +342,10 @@ def generate_commands(
     if response is None:
         return
 
-    print(f"Model {model} says:")
+    print(f"Model {model} says:\n")
     print(textwrap.indent(response, "    "))
 
-    execute_blocks(response)
+    execute_blocks(response, frame.f_locals)
 
     return
 
