@@ -20,13 +20,97 @@ VSCODE_WARNING_MESSAGE = """It seems you are on VS Code. The answers will be pri
 
 display_vscode_warning = any("debugpy" in mod for mod in sys.modules)
 
-if "OPENROUTER_API_KEY" in os.environ:
-    client = OpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=os.environ["OPENROUTER_API_KEY"],
-    )
-else:
+# Provider configuration mapping
+PROVIDERS = {
+    "openai": {
+        "base_url": None,  # Uses default OpenAI endpoint
+        "api_key_env": "OPENAI_API_KEY",
+        "default_model": "gpt-4-mini",
+    },
+    "anthropic": {
+        "base_url": "https://api.anthropic.com/v1/",
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "default_model": "claude-3-5-sonnet-20241022",
+    },
+    "openrouter": {
+        "base_url": "https://openrouter.ai/api/v1",
+        "api_key_env": "OPENROUTER_API_KEY",
+        "default_model": "openai/gpt-4-turbo",
+    },
+    "deepseek": {
+        "base_url": "https://api.deepseek.com/v1",
+        "api_key_env": "DEEPSEEK_API_KEY",
+        "default_model": "deepseek-chat",
+    },
+    "groq": {
+        "base_url": "https://api.groq.com/openai/v1",
+        "api_key_env": "GROQ_API_KEY",
+        "default_model": "mixtral-8x7b-32768",
+    },
+    "together": {
+        "base_url": "https://api.together.xyz/v1",
+        "api_key_env": "TOGETHER_API_KEY",
+        "default_model": "meta-llama/Llama-3-70b-chat-hf",
+    },
+    "ollama": {
+        "base_url": "http://localhost:11434/v1",
+        "api_key_env": "OLLAMA_API_KEY",
+        "default_model": "llama2",
+    },
+}
+
+
+def initialize_client():
+    """
+    Initialize the LLM client based on LDBG_API environment variable.
+    
+    Supported providers: openai, anthropic, openrouter, deepseek, groq, together, ollama.
+    
+    Environment variables:
+    - LDBG_API: Provider name (defaults to 'openai')
+    - Provider-specific API key (e.g., DEEPSEEK_API_KEY, GROQ_API_KEY)
+    
+    Returns:
+        tuple: (client, model_name) where client is an OpenAI instance and model_name is the default model
+    """
+    provider_name = os.environ.get("LDBG_API", "openai").lower()
+    
+    if provider_name not in PROVIDERS:
+        raise ValueError(
+            f"Unknown provider: {provider_name}. Supported providers: {', '.join(PROVIDERS.keys())}"
+        )
+    
+    provider_config = PROVIDERS[provider_name]
+    api_key_env = provider_config["api_key_env"]
+    base_url = provider_config["base_url"]
+    default_model = provider_config["default_model"]
+    
+    api_key = os.environ.get(api_key_env)
+    
+    if not api_key and provider_name != "ollama":
+        # Ollama can work without an API key in local mode
+        raise ValueError(
+            f"API key not found. Please set the {api_key_env} environment variable for {provider_name}."
+        )
+    
+    # Create client
+    if base_url:
+        client = OpenAI(base_url=base_url, api_key=api_key or "")
+    else:
+        # For OpenAI, use the default client which reads OPENAI_API_KEY
+        client = OpenAI()
+    
+    return client, default_model
+
+
+# Initialize the client
+try:
+    client, DEFAULT_MODEL = initialize_client()
+except ValueError as e:
+    # If initialization fails, fall back to OpenAI
+    print(f"Warning: {e}. Falling back to OpenAI.", file=sys.stderr)
     client = OpenAI()
+    DEFAULT_MODEL = "gpt-4-mini"
 
 
 def extract_code_blocks(markdown_text: str):
@@ -73,7 +157,7 @@ def indent(text, prefix=" " * 4):
 def generate_commands(
     prompt: str,
     frame=None,
-    model="gpt-5-mini-2025-08-07",
+    model=None,
     print_prompt=False,
     length_max=LENGTH_MAX,
     context="",
@@ -134,6 +218,10 @@ def generate_commands(
     if display_vscode_warning:
         display_vscode_warning = False
         return VSCODE_WARNING_MESSAGE
+
+    # Use default model if not specified
+    if model is None:
+        model = DEFAULT_MODEL
 
     frame_info = None
     if frame is None:

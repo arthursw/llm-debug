@@ -16,10 +16,10 @@ Here is [CJ Reynolds](https://www.youtube.com/watch?v=0ZUkQF6boNg) point of view
 ## Features
 
 - 🐍 Generate Python debug commands from natural-language instructions.
-- 🔍 Context-aware: prompt auto-includes call stack, local/global variable previews, current function - source, and nearby code.
-- 🤖 Supports OpenRouter
+- 🔍 Context-aware: prompt auto-includes call stack, local/global variable previews, current function source, and nearby code.
+- 🤖 Supports multiple LLM providers: OpenAI, Anthropic, DeepSeek, Groq, Together AI, OpenRouter, Ollama
 
-**NOTE**: In VS Code, you enter the function the Debug Console, and get the output in the terminal ; so put both tabs (Debug Console and Terminal) side to side.
+**NOTE**: In VS Code, you enter the function in the Debug Console, and get the output in the terminal ; so put both tabs (Debug Console and Terminal) side to side.
 
 ## Installation
 
@@ -105,9 +105,61 @@ Would you like to execute the following code block:
 
 By default, llm-debug uses the OpenAI client. So it reads the [OPENAI_API_KEY environment variable](https://platform.openai.com/docs/quickstart).
 
-To use OpenRouter instead, define the `OPENROUTER_API_KEY` environment variable:
+### Supported Providers
 
-`export OPENROUTER_API_KEY="your_api_key_here"`
+You can use any of the following LLM providers by setting the `LDBG_API` environment variable:
+
+#### OpenAI (default)
+```bash
+export OPENAI_API_KEY="your_api_key_here"
+```
+
+#### DeepSeek
+```bash
+export LDBG_API="deepseek"
+export DEEPSEEK_API_KEY="your_api_key_here"
+```
+
+#### Anthropic (Claude)
+```bash
+export LDBG_API="anthropic"
+export ANTHROPIC_API_KEY="your_api_key_here"
+```
+
+#### Groq
+```bash
+export LDBG_API="groq"
+export GROQ_API_KEY="your_api_key_here"
+```
+
+#### OpenRouter
+```bash
+export LDBG_API="openrouter"
+export OPENROUTER_API_KEY="your_api_key_here"
+```
+
+#### Together AI
+```bash
+export LDBG_API="together"
+export TOGETHER_API_KEY="your_api_key_here"
+```
+
+#### Ollama (local)
+```bash
+export LDBG_API="ollama"
+# No API key required for local Ollama installations
+```
+
+### Custom Model
+
+By default, each provider uses its recommended model. You can override this by passing the `model` parameter to `ldbg.gc()`:
+
+```python
+import ldbg
+ldbg.gc("describe my_data", model="gpt-4-turbo")
+ldbg.gc("describe my_data", model="deepseek-coder")
+ldbg.gc("describe my_data", model="claude-3-opus-20240229")
+```
 
 ## License
 

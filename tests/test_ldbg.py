@@ -1,6 +1,7 @@
 import inspect
 import builtins
 import types
+import os
 
 import ldbg.ldbg as ldbg
 
@@ -158,3 +159,141 @@ def test_generate_commands_handles_none_response(monkeypatch, capsys):
     ldbg.generate_commands(
         "any prompt", frame=inspect.currentframe(), print_prompt=False
     )
+
+
+def test_initialize_client_default_openai(monkeypatch):
+    """Test that initialize_client returns OpenAI client by default."""
+    monkeypatch.delenv("LDBG_API", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "test_key")
+    
+    client, model = ldbg.initialize_client()
+    
+    assert client is not None
+    assert isinstance(client, ldbg.OpenAI)
+    assert model == "gpt-4-mini"
+
+
+def test_initialize_client_deepseek(monkeypatch):
+    """Test that initialize_client works with DeepSeek provider."""
+    monkeypatch.setenv("LDBG_API", "deepseek")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test_deepseek_key")
+    
+    client, model = ldbg.initialize_client()
+    
+    assert client is not None
+    assert isinstance(client, ldbg.OpenAI)
+    assert model == "deepseek-chat"
+    assert str(client.base_url) == "https://api.deepseek.com/v1/"
+
+
+def test_initialize_client_groq(monkeypatch):
+    """Test that initialize_client works with Groq provider."""
+    monkeypatch.setenv("LDBG_API", "groq")
+    monkeypatch.setenv("GROQ_API_KEY", "test_groq_key")
+    
+    client, model = ldbg.initialize_client()
+    
+    assert client is not None
+    assert isinstance(client, ldbg.OpenAI)
+    assert model == "mixtral-8x7b-32768"
+    assert str(client.base_url) == "https://api.groq.com/openai/v1/"
+
+
+def test_initialize_client_anthropic(monkeypatch):
+    """Test that initialize_client works with Anthropic provider."""
+    monkeypatch.setenv("LDBG_API", "anthropic")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test_anthropic_key")
+    
+    client, model = ldbg.initialize_client()
+    
+    assert client is not None
+    assert isinstance(client, ldbg.OpenAI)
+    assert model == "claude-3-5-sonnet-20241022"
+    assert client.base_url == "https://api.anthropic.com/v1/"
+
+
+def test_initialize_client_together(monkeypatch):
+    """Test that initialize_client works with Together AI provider."""
+    monkeypatch.setenv("LDBG_API", "together")
+    monkeypatch.setenv("TOGETHER_API_KEY", "test_together_key")
+    
+    client, model = ldbg.initialize_client()
+    
+    assert client is not None
+    assert isinstance(client, ldbg.OpenAI)
+    assert model == "meta-llama/Llama-3-70b-chat-hf"
+    assert str(client.base_url) == "https://api.together.xyz/v1/"
+
+
+def test_initialize_client_openrouter(monkeypatch):
+    """Test that initialize_client works with OpenRouter provider."""
+    monkeypatch.setenv("LDBG_API", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test_openrouter_key")
+    
+    client, model = ldbg.initialize_client()
+    
+    assert client is not None
+    assert isinstance(client, ldbg.OpenAI)
+    assert model == "openai/gpt-4-turbo"
+    assert str(client.base_url) == "https://openrouter.ai/api/v1/"
+
+
+def test_initialize_client_ollama(monkeypatch):
+    """Test that initialize_client works with Ollama provider."""
+    monkeypatch.setenv("LDBG_API", "ollama")
+    # Ollama doesn't require an API key
+    monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
+    
+    client, model = ldbg.initialize_client()
+    
+    assert client is not None
+    assert isinstance(client, ldbg.OpenAI)
+    assert model == "llama2"
+    assert str(client.base_url) == "http://localhost:11434/v1/"
+
+
+def test_initialize_client_invalid_provider(monkeypatch):
+    """Test that initialize_client raises error for invalid provider."""
+    monkeypatch.setenv("LDBG_API", "invalid_provider")
+    
+    try:
+        ldbg.initialize_client()
+        assert False, "Should have raised ValueError"
+    except ValueError as e:
+        assert "Unknown provider" in str(e)
+
+
+def test_initialize_client_missing_api_key(monkeypatch):
+    """Test that initialize_client raises error when API key is missing."""
+    monkeypatch.setenv("LDBG_API", "deepseek")
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    
+    try:
+        ldbg.initialize_client()
+        assert False, "Should have raised ValueError"
+    except ValueError as e:
+        assert "API key not found" in str(e)
+
+
+def test_generate_commands_uses_default_model(monkeypatch, capsys):
+    """Test that generate_commands uses the default model when none is specified."""
+    fake_response_text = "Here is a suggestion:\n\n```python\nprint('test')\n```\n"
+
+    def fake_create(*args, **kwargs):
+        # Verify the model parameter matches the default
+        assert kwargs.get("model") == ldbg.DEFAULT_MODEL
+        msg = types.SimpleNamespace(content=fake_response_text)
+        choice = types.SimpleNamespace(message=msg)
+        return types.SimpleNamespace(choices=[choice])
+
+    monkeypatch.setattr(ldbg.client.chat.completions, "create", fake_create)
+    monkeypatch.setattr(ldbg, "execute_blocks", lambda resp_text, locals: None)
+    monkeypatch.setattr(ldbg, "display_vscode_warning", False)
+
+    # Call without specifying model
+    ldbg.generate_commands(
+        "test prompt", frame=inspect.currentframe(), print_prompt=False
+    )
+
+    captured = capsys.readouterr()
+    assert f'Asking {ldbg.DEFAULT_MODEL} "test prompt"...' in captured.out
