@@ -1,6 +1,6 @@
 [project]
 name = "ldbg"
-version = "0.1.2"
+version = "0.1.3"
 description = "Add your description here"
 readme = "README.md"
 authors = [
@@ -19,4 +19,9 @@ build-backend = "hatchling.build"
 dev = [
     "pytest>=8.4.2",
     "ruff>=0.14.0",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: marks tests as integration tests that make real API calls (requires OPENROUTER_API_KEY)",
 ]

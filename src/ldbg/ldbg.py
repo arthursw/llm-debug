@@ -18,24 +18,30 @@ CODE_BLOCK_REGEX = r"```(?:[\w+-]*)\n(.*?)```"
 # Message in one line since the Debug Console shows the raw string
 VSCODE_WARNING_MESSAGE = """It seems you are on VS Code. The answers will be printed in the Terminal while your inputs are made from the Debug Console. For optimal use, display the Debug Console and Terminal side-by-side. This message will be shown only once. Call the ldbg.gc() function again to make your request to the LLM."""
 
-display_vscode_warning = any("debugpy" in mod for mod in sys.modules)
+
+def _is_vscode_debugger():
+    """Check if running inside VS Code debugger."""
+    return any("debugpy" in mod for mod in sys.modules)
+
+
+display_vscode_warning = _is_vscode_debugger()
 
 # Provider configuration mapping
 PROVIDERS = {
     "openai": {
         "base_url": None,  # Uses default OpenAI endpoint
         "api_key_env": "OPENAI_API_KEY",
-        "default_model": "gpt-4-mini",
+        "default_model": "gpt-5-mini",
     },
     "anthropic": {
         "base_url": "https://api.anthropic.com/v1/",
         "api_key_env": "ANTHROPIC_API_KEY",
-        "default_model": "claude-3-5-sonnet-20241022",
+        "default_model": "claude-haiku-4-5-20251001",
     },
     "openrouter": {
         "base_url": "https://openrouter.ai/api/v1",
         "api_key_env": "OPENROUTER_API_KEY",
-        "default_model": "openai/gpt-4-turbo",
+        "default_model": "openai/gpt-5-mini",
     },
     "deepseek": {
         "base_url": "https://api.deepseek.com/v1",
@@ -45,17 +51,17 @@ PROVIDERS = {
     "groq": {
         "base_url": "https://api.groq.com/openai/v1",
         "api_key_env": "GROQ_API_KEY",
-        "default_model": "mixtral-8x7b-32768",
+        "default_model": "meta-llama/llama-4-maverick-17b-128e-instruct",
     },
     "together": {
         "base_url": "https://api.together.xyz/v1",
         "api_key_env": "TOGETHER_API_KEY",
-        "default_model": "meta-llama/Llama-3-70b-chat-hf",
+        "default_model": "meta-llama/llama-4-maverick-17b-128e-instruct",
     },
     "ollama": {
         "base_url": "http://localhost:11434/v1",
         "api_key_env": "OLLAMA_API_KEY",
-        "default_model": "llama2",
+        "default_model": "llama3",
     },
 }
 
@@ -141,7 +147,7 @@ def execute_blocks(markdown_text: str | None, locals: dict) -> None:
                     f'Discard answer "{confirm}" since it is likely from a previous keyboard stroke. Please wait at least 0.5s to read the code and answer safely.'
                 )
                 continue
-            if confirm.lower() in ["yes", "y"]:
+            if confirm in ["yes", "y"]:
                 print(f"\nExecuting block {n}...\n\n")
                 execute_code_block(block, locals)
                 print("\n\n\nExecution done.")
@@ -154,133 +160,17 @@ def indent(text, prefix=" " * 4):
     return textwrap.indent(text, prefix)
 
 
-def generate_commands(
-    prompt: str,
-    frame=None,
-    model=None,
-    print_prompt=False,
-    length_max=LENGTH_MAX,
-    context="",
-):
-    """
-    Generate Python debug help based on natural-language instructions.
-
-    Includes:
-    - Call stack / traceback
-    - Current function’s source
-    - Surrounding source lines (like ipdb 'll')
-
-    Example:
-
-    >>> import ldbg
-    >>> ldbg.generate_commands("describe unknown_data")
-    The model "gpt-5-mini-2025-08-07" answered:
-
-        unknown_data is an numpy array which can be described with the following pandas code:
-
-        ```
-        pandas.DataFrame(unknown_data).describe()
-        ```
-
-        Note: you can use numpy.set_printoptions (or a library like numpyprint) to pretty print your array:
-
-        ```
-        with np.printoptions(precision=2, suppress=True, threshold=5):
-            unknown_data
-        ```
-
-    Would you like to execute the following code block:
-        pandas.DataFrame(unknown_data).describe()
-    (y/n)?
+def _should_skip_frame(frame_info):
+    """Determine if a frame should be skipped when finding the caller's frame."""
+    return (
+        "/.vscode/extensions/" in frame_info.filename
+        or "<string>" in frame_info.filename
+        or (frame_info.filename.endswith("ldbg.py") and frame_info.function == "generate_commands")
+    )
 
 
-    <<< user enters y
-                  0
-    count  9.000000
-    mean   4.000000
-    std    2.738613
-    min    0.000000
-    25%    2.000000
-    50%    4.000000
-    75%    6.000000
-    max    8.000000
-
-
-    Would you like to execute the following code block:
-        with np.printoptions(precision=2, suppress=True, threshold=5):
-            unknown_data
-    (y/n)?
-
-    <<< user enters n
-    """
-
-    global display_vscode_warning
-    if display_vscode_warning:
-        display_vscode_warning = False
-        return VSCODE_WARNING_MESSAGE
-
-    # Use default model if not specified
-    if model is None:
-        model = DEFAULT_MODEL
-
-    frame_info = None
-    if frame is None:
-        frame_info = next(
-            fi
-            for fi in inspect.stack()
-            if "/.vscode/extensions/" not in fi.filename
-            and "<string>" not in fi.filename
-            and not (
-                fi.filename.endswith("ldbg.py") and fi.function == "generate_commands"
-            )
-        )
-
-        frame: FrameType = cast(FrameType, frame_info.frame)
-
-    # Locals & globals preview
-    filtered_locals = {
-        key: value
-        for key, value in frame.f_locals.items()
-        if key not in ["__builtin__", "__builtins__"]
-    }
-
-    locals_preview = pprint.pformat(filtered_locals)
-    if len(locals_preview) > length_max:
-        locals_preview = (
-            locals_preview[:length_max]
-            + f" ... \nLocal variables are truncated because it is too long (more than {length_max} characters)!"
-        )
-
-    # globals_preview = pprint.pformat(frame.f_globals)[
-    #     :length_max
-    # ]
-
-    # Traceback / call stack
-    stack_summary = traceback.format_stack(frame)
-    stack_text = "".join(stack_summary[-20:])  # limit to avoid overload
-
-    # Current function source
-    try:
-        source_lines, start_line = inspect.getsourcelines(frame)
-        sources_lines_with_line_numbers = source_lines.copy()
-
-        for i, line in enumerate(source_lines):
-            prefix = "→ " if i + start_line == frame.f_lineno else "  "
-            sources_lines_with_line_numbers[i] = (
-                f"{prefix}{i + start_line:4d}: {line.rstrip()}"
-            )
-
-        func_source = "".join(sources_lines_with_line_numbers)
-    except (OSError, TypeError):
-        try:
-            # fallback: print nearby lines from the source file
-            filename = frame.f_code.co_filename
-            start = frame.f_code.co_firstlineno
-            lines = linecache.getlines(filename)
-            func_source = "".join(lines[max(0, start - 5) : start + 200])
-        except Exception:
-            func_source = "<source unavailable>"
-
+def _get_system_prompt(prompt: str, model: str, locals_preview: str, stack_text: str, func_source: str, context: str) -> str:
+    """Build the system prompt for the LLM."""
     additional_context = textwrap.dedent(
         f"""
     Additional context:
@@ -292,8 +182,7 @@ def generate_commands(
         else ""
     )
 
-    # ldbg.generate_commands({prompt}, model={model}, code_only={code_only}, print_prompt={print_prompt}, print_answer={print_answer}, length_max={length_max})
-    context = textwrap.dedent(f"""
+    return textwrap.dedent(f"""
     You are a Python debugging assistant.
     The user is paused inside a Python script.
                               
@@ -421,19 +310,145 @@ def generate_commands(
     Provide short and concise answers and code.
     """)
 
+
+def generate_commands(
+    prompt: str,
+    frame=None,
+    model=None,
+    print_prompt=False,
+    length_max=LENGTH_MAX,
+    context="",
+):
+    """
+    Generate Python debug help based on natural-language instructions.
+
+    Includes:
+    - Call stack / traceback
+    - Current function’s source
+    - Surrounding source lines (like ipdb 'll')
+
+    Example:
+
+    >>> import ldbg
+    >>> ldbg.generate_commands("describe unknown_data")
+    The model "gpt-5-mini-2025-08-07" answered:
+
+        unknown_data is an numpy array which can be described with the following pandas code:
+
+        ```
+        pandas.DataFrame(unknown_data).describe()
+        ```
+
+        Note: you can use numpy.set_printoptions (or a library like numpyprint) to pretty print your array:
+
+        ```
+        with np.printoptions(precision=2, suppress=True, threshold=5):
+            unknown_data
+        ```
+
+    Would you like to execute the following code block:
+        pandas.DataFrame(unknown_data).describe()
+    (y/n)?
+
+
+    <<< user enters y
+                  0
+    count  9.000000
+    mean   4.000000
+    std    2.738613
+    min    0.000000
+    25%    2.000000
+    50%    4.000000
+    75%    6.000000
+    max    8.000000
+
+
+    Would you like to execute the following code block:
+        with np.printoptions(precision=2, suppress=True, threshold=5):
+            unknown_data
+    (y/n)?
+
+    <<< user enters n
+    """
+
+    global display_vscode_warning
+    if display_vscode_warning:
+        display_vscode_warning = False
+        return VSCODE_WARNING_MESSAGE
+
+    # Use default model if not specified
+    if model is None:
+        model = DEFAULT_MODEL
+
+    frame_info = None
+    if frame is None:
+        frame_info = next(
+            fi
+            for fi in inspect.stack()
+            if not _should_skip_frame(fi)
+        )
+
+        frame: FrameType = cast(FrameType, frame_info.frame)
+
+    # Locals & globals preview
+    filtered_locals = {
+        key: value
+        for key, value in frame.f_locals.items()
+        if key not in ["__builtin__", "__builtins__"]
+    }
+
+    locals_preview = pprint.pformat(filtered_locals)
+    if len(locals_preview) > length_max:
+        locals_preview = (
+            locals_preview[:length_max]
+            + f" ... \nLocal variables are truncated because it is too long (more than {length_max} characters)!"
+        )
+
+    # globals_preview = pprint.pformat(frame.f_globals)[
+    #     :length_max
+    # ]
+
+    # Traceback / call stack
+    stack_summary = traceback.format_stack(frame)
+    stack_text = "".join(stack_summary[-20:])  # limit to avoid overload
+
+    # Current function source
+    try:
+        source_lines, start_line = inspect.getsourcelines(frame)
+        sources_lines_with_line_numbers = source_lines.copy()
+
+        for i, line in enumerate(source_lines):
+            prefix = "→ " if i + start_line == frame.f_lineno else "  "
+            sources_lines_with_line_numbers[i] = (
+                f"{prefix}{i + start_line:4d}: {line.rstrip()}"
+            )
+
+        func_source = "".join(sources_lines_with_line_numbers)
+    except (OSError, TypeError):
+        try:
+            # fallback: print nearby lines from the source file
+            filename = frame.f_code.co_filename
+            start = frame.f_code.co_firstlineno
+            lines = linecache.getlines(filename)
+            func_source = "".join(lines[max(0, start - 5) : start + 200])
+        except Exception:
+            func_source = "<source unavailable>"
+
+    # Build system prompt using helper
+    system_prompt = _get_system_prompt(prompt, model, locals_preview, stack_text, func_source, context)
+
     if print_prompt:
         print("System prompt:")
-        print(context)
+        print(system_prompt)
 
     print(f'\n\nAsking {model} "{prompt}"...\n')
 
     resp = client.chat.completions.create(
         model=model,
         messages=[
-            {"role": "system", "content": context},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
         ],
-        temperature=1,
     )
 
     response = resp.choices[0].message.content

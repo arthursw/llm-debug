@@ -3,6 +3,8 @@ import builtins
 import types
 import os
 
+import pytest
+
 import ldbg.ldbg as ldbg
 
 
@@ -127,7 +129,7 @@ def test_generate_commands_calls_api_and_forwards_response(monkeypatch, capsys):
     captured = capsys.readouterr()
     # Confirm we printed the System prompt and the asking line
     assert "System prompt:" in captured.out
-    assert 'Asking gpt-5-mini-2025-08-07 "describe unknown_data"...' in captured.out
+    assert f'Asking {ldbg.DEFAULT_MODEL} "describe unknown_data"...' in captured.out
 
     # Confirm the API stub was called and execute_blocks got the model response
     assert called["create_called"] is True
@@ -170,86 +172,37 @@ def test_initialize_client_default_openai(monkeypatch):
     
     assert client is not None
     assert isinstance(client, ldbg.OpenAI)
-    assert model == "gpt-4-mini"
+    assert model == ldbg.PROVIDERS["openai"]["default_model"]
 
 
-def test_initialize_client_deepseek(monkeypatch):
-    """Test that initialize_client works with DeepSeek provider."""
-    monkeypatch.setenv("LDBG_API", "deepseek")
-    monkeypatch.setenv("DEEPSEEK_API_KEY", "test_deepseek_key")
+@pytest.mark.parametrize("provider_name", list(ldbg.PROVIDERS.keys()))
+def test_initialize_client_with_provider(monkeypatch, provider_name):
+    """Test that initialize_client works with all configured providers."""
+    provider_config = ldbg.PROVIDERS[provider_name]
+    
+    monkeypatch.setenv("LDBG_API", provider_name)
+    
+    # Set the API key for the provider
+    api_key_env = provider_config["api_key_env"]
+    if provider_name != "ollama":
+        # Most providers require an API key
+        monkeypatch.setenv(api_key_env, f"test_{provider_name}_key")
+    else:
+        # Ollama doesn't require an API key
+        monkeypatch.delenv(api_key_env, raising=False)
     
     client, model = ldbg.initialize_client()
     
     assert client is not None
     assert isinstance(client, ldbg.OpenAI)
-    assert model == "deepseek-chat"
-    assert str(client.base_url) == "https://api.deepseek.com/v1/"
-
-
-def test_initialize_client_groq(monkeypatch):
-    """Test that initialize_client works with Groq provider."""
-    monkeypatch.setenv("LDBG_API", "groq")
-    monkeypatch.setenv("GROQ_API_KEY", "test_groq_key")
+    assert model == provider_config["default_model"]
     
-    client, model = ldbg.initialize_client()
-    
-    assert client is not None
-    assert isinstance(client, ldbg.OpenAI)
-    assert model == "mixtral-8x7b-32768"
-    assert str(client.base_url) == "https://api.groq.com/openai/v1/"
-
-
-def test_initialize_client_anthropic(monkeypatch):
-    """Test that initialize_client works with Anthropic provider."""
-    monkeypatch.setenv("LDBG_API", "anthropic")
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test_anthropic_key")
-    
-    client, model = ldbg.initialize_client()
-    
-    assert client is not None
-    assert isinstance(client, ldbg.OpenAI)
-    assert model == "claude-3-5-sonnet-20241022"
-    assert client.base_url == "https://api.anthropic.com/v1/"
-
-
-def test_initialize_client_together(monkeypatch):
-    """Test that initialize_client works with Together AI provider."""
-    monkeypatch.setenv("LDBG_API", "together")
-    monkeypatch.setenv("TOGETHER_API_KEY", "test_together_key")
-    
-    client, model = ldbg.initialize_client()
-    
-    assert client is not None
-    assert isinstance(client, ldbg.OpenAI)
-    assert model == "meta-llama/Llama-3-70b-chat-hf"
-    assert str(client.base_url) == "https://api.together.xyz/v1/"
-
-
-def test_initialize_client_openrouter(monkeypatch):
-    """Test that initialize_client works with OpenRouter provider."""
-    monkeypatch.setenv("LDBG_API", "openrouter")
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test_openrouter_key")
-    
-    client, model = ldbg.initialize_client()
-    
-    assert client is not None
-    assert isinstance(client, ldbg.OpenAI)
-    assert model == "openai/gpt-4-turbo"
-    assert str(client.base_url) == "https://openrouter.ai/api/v1/"
-
-
-def test_initialize_client_ollama(monkeypatch):
-    """Test that initialize_client works with Ollama provider."""
-    monkeypatch.setenv("LDBG_API", "ollama")
-    # Ollama doesn't require an API key
-    monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
-    
-    client, model = ldbg.initialize_client()
-    
-    assert client is not None
-    assert isinstance(client, ldbg.OpenAI)
-    assert model == "llama2"
-    assert str(client.base_url) == "http://localhost:11434/v1/"
+    # Check base_url if configured
+    # Note: OpenAI client normalizes URLs by adding trailing slash if not present
+    if provider_config["base_url"] is not None:
+        expected_url = provider_config["base_url"].rstrip("/")
+        actual_url = str(client.base_url).rstrip("/")
+        assert actual_url == expected_url
 
 
 def test_initialize_client_invalid_provider(monkeypatch):
