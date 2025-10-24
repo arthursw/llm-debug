@@ -1,7 +1,6 @@
 import inspect
 import builtins
 import types
-import os
 
 import pytest
 
@@ -41,9 +40,11 @@ def test_execute_blocks_user_confirms_exec(monkeypatch, capsys):
     monkeypatch.setattr(builtins, "input", lambda prompt="": "y")
     # Simulate enough time passing (>0.5s) between prompt and input to bypass safety gate
     t = {"val": 0.0}
+
     def fake_time():
         t["val"] += 1.0
         return t["val"]
+
     monkeypatch.setattr(ldbg.time, "time", fake_time)
 
     executed = {"called": False, "code": None}
@@ -69,9 +70,11 @@ def test_execute_blocks_user_declines(monkeypatch, capsys):
     monkeypatch.setattr(builtins, "input", lambda prompt="": "n")
     # Simulate enough time passing (>0.5s) between prompt and input to bypass safety gate
     t = {"val": 0.0}
+
     def fake_time():
         t["val"] += 1.0
         return t["val"]
+
     monkeypatch.setattr(ldbg.time, "time", fake_time)
 
     executed = {"called": False}
@@ -167,9 +170,9 @@ def test_initialize_client_default_openai(monkeypatch):
     """Test that initialize_client returns OpenAI client by default."""
     monkeypatch.delenv("LDBG_API", raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "test_key")
-    
+
     client, model = ldbg.initialize_client()
-    
+
     assert client is not None
     assert isinstance(client, ldbg.OpenAI)
     assert model == ldbg.PROVIDERS["openai"]["default_model"]
@@ -179,9 +182,9 @@ def test_initialize_client_default_openai(monkeypatch):
 def test_initialize_client_with_provider(monkeypatch, provider_name):
     """Test that initialize_client works with all configured providers."""
     provider_config = ldbg.PROVIDERS[provider_name]
-    
+
     monkeypatch.setenv("LDBG_API", provider_name)
-    
+
     # Set the API key for the provider
     api_key_env = provider_config["api_key_env"]
     if provider_name != "ollama":
@@ -190,13 +193,13 @@ def test_initialize_client_with_provider(monkeypatch, provider_name):
     else:
         # Ollama doesn't require an API key
         monkeypatch.delenv(api_key_env, raising=False)
-    
+
     client, model = ldbg.initialize_client()
-    
+
     assert client is not None
     assert isinstance(client, ldbg.OpenAI)
     assert model == provider_config["default_model"]
-    
+
     # Check base_url if configured
     # Note: OpenAI client normalizes URLs by adding trailing slash if not present
     if provider_config["base_url"] is not None:
@@ -208,7 +211,7 @@ def test_initialize_client_with_provider(monkeypatch, provider_name):
 def test_initialize_client_invalid_provider(monkeypatch):
     """Test that initialize_client raises error for invalid provider."""
     monkeypatch.setenv("LDBG_API", "invalid_provider")
-    
+
     try:
         ldbg.initialize_client()
         assert False, "Should have raised ValueError"
@@ -220,7 +223,7 @@ def test_initialize_client_missing_api_key(monkeypatch):
     """Test that initialize_client raises error when API key is missing."""
     monkeypatch.setenv("LDBG_API", "deepseek")
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
-    
+
     try:
         ldbg.initialize_client()
         assert False, "Should have raised ValueError"

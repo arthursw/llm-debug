@@ -69,43 +69,43 @@ PROVIDERS = {
 def initialize_client():
     """
     Initialize the LLM client based on LDBG_API environment variable.
-    
+
     Supported providers: openai, anthropic, openrouter, deepseek, groq, together, ollama.
-    
+
     Environment variables:
     - LDBG_API: Provider name (defaults to 'openai')
     - Provider-specific API key (e.g., DEEPSEEK_API_KEY, GROQ_API_KEY)
-    
+
     Returns:
         tuple: (client, model_name) where client is an OpenAI instance and model_name is the default model
     """
     provider_name = os.environ.get("LDBG_API", "openai").lower()
-    
+
     if provider_name not in PROVIDERS:
         raise ValueError(
             f"Unknown provider: {provider_name}. Supported providers: {', '.join(PROVIDERS.keys())}"
         )
-    
+
     provider_config = PROVIDERS[provider_name]
     api_key_env = provider_config["api_key_env"]
     base_url = provider_config["base_url"]
     default_model = provider_config["default_model"]
-    
+
     api_key = os.environ.get(api_key_env)
-    
+
     if not api_key and provider_name != "ollama":
         # Ollama can work without an API key in local mode
         raise ValueError(
             f"API key not found. Please set the {api_key_env} environment variable for {provider_name}."
         )
-    
+
     # Create client
     if base_url:
         client = OpenAI(base_url=base_url, api_key=api_key or "")
     else:
         # For OpenAI, use the default client which reads OPENAI_API_KEY
         client = OpenAI()
-    
+
     return client, default_model
 
 
@@ -165,11 +165,21 @@ def _should_skip_frame(frame_info):
     return (
         "/.vscode/extensions/" in frame_info.filename
         or "<string>" in frame_info.filename
-        or (frame_info.filename.endswith("ldbg.py") and frame_info.function == "generate_commands")
+        or (
+            frame_info.filename.endswith("ldbg.py")
+            and frame_info.function == "generate_commands"
+        )
     )
 
 
-def _get_system_prompt(prompt: str, model: str, locals_preview: str, stack_text: str, func_source: str, context: str) -> str:
+def _get_system_prompt(
+    prompt: str,
+    model: str,
+    locals_preview: str,
+    stack_text: str,
+    func_source: str,
+    context: str,
+) -> str:
     """Build the system prompt for the LLM."""
     additional_context = textwrap.dedent(
         f"""
@@ -382,11 +392,7 @@ def generate_commands(
 
     frame_info = None
     if frame is None:
-        frame_info = next(
-            fi
-            for fi in inspect.stack()
-            if not _should_skip_frame(fi)
-        )
+        frame_info = next(fi for fi in inspect.stack() if not _should_skip_frame(fi))
 
         frame: FrameType = cast(FrameType, frame_info.frame)
 
@@ -435,7 +441,9 @@ def generate_commands(
             func_source = "<source unavailable>"
 
     # Build system prompt using helper
-    system_prompt = _get_system_prompt(prompt, model, locals_preview, stack_text, func_source, context)
+    system_prompt = _get_system_prompt(
+        prompt, model, locals_preview, stack_text, func_source, context
+    )
 
     if print_prompt:
         print("System prompt:")

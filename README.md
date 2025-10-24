@@ -3,6 +3,7 @@
 ### A Minimal Python Library to debug with LLMs
 
 Ldbg enables to use natural-language prompts while debugging. Prompts are augmented with your current stack, variables, and source context.
+
 It is like [ShellGPT](https://github.com/TheR1D/shell_gpt) but for pdb, ipdb, Jupyter, the VS Code Debug Console, etc.
 
 DO NOT USE THIS LIBRARY

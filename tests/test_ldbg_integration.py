@@ -13,7 +13,6 @@ To skip integration tests, run: pytest tests/test_ldbg_integration.py -v -m "not
 import os
 import inspect
 import pytest
-import types
 
 import ldbg.ldbg as ldbg
 
@@ -26,14 +25,14 @@ def to_openrouter_model(provider: str, model: str | None = None) -> str:
     """
     Map a provider's model name to the corresponding OpenRouter model ID.
     Falls back to the provider's default_model if model is None.
-    
+
     Args:
         provider: The provider name (e.g., 'openai', 'anthropic')
         model: Optional specific model name. If None, uses provider's default_model
-        
+
     Returns:
         The OpenRouter model ID in the format "provider/model"
-        
+
     Raises:
         ValueError: If provider is not found in PROVIDERS
     """
@@ -94,43 +93,45 @@ def get_provider_models():
 @pytest.mark.parametrize(
     "provider_name,default_model,openrouter_model",
     get_provider_models(),
-    ids=lambda x: x[0]  # Use provider name as test ID
+    ids=lambda x: x[0],  # Use provider name as test ID
 )
 def test_default_models_via_openrouter(
-    setup_openrouter, 
-    monkeypatch, 
-    capsys, 
-    provider_name, 
-    default_model, 
-    openrouter_model
+    setup_openrouter,
+    monkeypatch,
+    capsys,
+    provider_name,
+    default_model,
+    openrouter_model,
 ):
     """
     Test that each provider's default model can be accessed through OpenRouter.
-    
+
     This test dynamically reads all providers from PROVIDERS and tests each one.
     """
     client, _ = setup_openrouter
-    
+
     # Ensure VSCode warning doesn't interfere
     monkeypatch.setattr(ldbg, "display_vscode_warning", False)
     monkeypatch.setattr(ldbg, "execute_blocks", lambda resp_text, locals: None)
-    
+
     # Make a real API call with a simple prompt
     prompt = f"Respond briefly with: 'Hello from {provider_name}'."
-    
+
     ldbg.generate_commands(
-        prompt,
-        frame=inspect.currentframe(),
-        model=openrouter_model,
-        print_prompt=False
+        prompt, frame=inspect.currentframe(), model=openrouter_model, print_prompt=False
     )
-    
+
     captured = capsys.readouterr()
     # Verify we got a response from the model
-    assert f"Model {openrouter_model} says:" in captured.out, \
+    assert f"Model {openrouter_model} says:" in captured.out, (
         f"Failed to get response from {openrouter_model} (provider: {provider_name})"
-    assert len(captured.out) > 0, \
+    )
+    assert len(captured.out) > 0, (
         f"Empty response from {openrouter_model} (provider: {provider_name})"
+    )
     # Verify we got actual content (not just error)
-    assert "Hello from" in captured.out or provider_name.lower() in captured.out.lower(), \
+    assert (
+        "Hello from" in captured.out or provider_name.lower() in captured.out.lower()
+    ), (
         f"Response doesn't contain expected content from {openrouter_model} (provider: {provider_name})"
+    )
