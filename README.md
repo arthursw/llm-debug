@@ -10,10 +10,6 @@ DO NOT USE THIS LIBRARY
 
 > “AI everywhere is rocket engines on a skateboard: a thrill that ends in wreckage. The planet pays in energy and emissions, and we pay in something subtler — the slow atrophy of our own intelligence, left idle while the machines do the heavy lifting.” ChatGPT
 
-Here is [CJ Reynolds](https://www.youtube.com/watch?v=0ZUkQF6boNg) point of view:
-
-> I used to enjoy programming. Now, my days are typically spent going back and forth with an LLM and pretty often yelling at it… And part of enjoying programming for me was enjoying the little wins, right? You would work really hard to make something… or to figure something out. And once you figured it out, you'd have that little win. You'd get that dopamine hit and you'd feel good about yourself and you could keep going. I don't get that when I'm using LLMs to write code. Once it's figured something out, I don't feel like I did any work to get there. And then I'm just mad that it's doing the wrong thing. And then we go through this back and forth cycle and it's not fun.
-
 ## Features
 
 - 🐍 Generate Python debug commands from natural-language instructions.
